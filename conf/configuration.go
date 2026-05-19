@@ -4,7 +4,9 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"net/mail"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -90,12 +92,13 @@ type ProviderConfiguration struct {
 }
 
 type SMTPConfiguration struct {
-	MaxFrequency time.Duration `json:"max_frequency" split_words:"true"`
-	Host         string        `json:"host"`
-	Port         int           `json:"port,omitempty" default:"587"`
-	User         string        `json:"user"`
-	Pass         string        `json:"pass,omitempty"`
-	AdminEmail   string        `json:"admin_email" split_words:"true"`
+	MaxFrequency    time.Duration `json:"max_frequency" split_words:"true"`
+	Host            string        `json:"host"`
+	Port            int           `json:"port,omitempty" default:"587"`
+	User            string        `json:"user"`
+	Pass            string        `json:"pass,omitempty"`
+	AdminEmail      string        `json:"admin_email" split_words:"true"`
+	ReservedDomains []string      `json:"reserved_domains" split_words:"true"`
 }
 
 type MailerConfiguration struct {
@@ -280,6 +283,26 @@ func (o *OAuthProviderConfiguration) Validate() error {
 	}
 	if o.RedirectURI == "" {
 		return errors.New("Missing redirect URI")
+	}
+	return nil
+}
+
+func (s *SMTPConfiguration) Validate() error {
+	if s.AdminEmail != "" {
+		addr, err := mail.ParseAddress(s.AdminEmail)
+		if err != nil {
+			return errors.New("invalid admin_email address")
+		}
+		idx := strings.LastIndex(addr.Address, "@")
+		if idx >= 0 {
+			domain := strings.ToLower(addr.Address[idx+1:])
+			for _, reserved := range s.ReservedDomains {
+				normalizedReserved := strings.ToLower(strings.TrimRight(strings.TrimSpace(reserved), "."))
+				if domain == normalizedReserved || strings.HasSuffix(domain, "."+normalizedReserved) {
+					return errors.New("admin_email cannot use a reserved domain")
+				}
+			}
+		}
 	}
 	return nil
 }

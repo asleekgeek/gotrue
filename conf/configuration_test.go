@@ -25,6 +25,34 @@ func TestGlobal(t *testing.T) {
 	assert.Equal(t, "X-Request-ID", gc.API.RequestIDHeader)
 }
 
+func TestSMTPConfigurationValidate(t *testing.T) {
+	cases := []struct {
+		adminEmail string
+		wantErr    bool
+	}{
+		{"", false},                    // empty is fine
+		{"noreply@foobar.com", false},  // valid non-reserved domain
+		{"team@example.com", true},     // reserved domain
+		{"user@example.app", true},     // reserved domain
+		{"user@sub.example.com", true}, // subdomain of reserved
+		{"not-an-email", true},         // invalid format
+		{"\"a@b\"@example.com", true},  // quoted local-part containing @
+		{"user@example.com", true},     // matches unnormalized reserved entry " Example.COM."
+	}
+
+	reservedDomains := []string{"example.com", "example.app", " Example.COM."} // last entry tests normalization
+
+	for _, tc := range cases {
+		s := &SMTPConfiguration{AdminEmail: tc.adminEmail, ReservedDomains: reservedDomains}
+		err := s.Validate()
+		if tc.wantErr {
+			assert.Error(t, err, "expected error for admin_email %q", tc.adminEmail)
+		} else {
+			assert.NoError(t, err, "expected no error for admin_email %q", tc.adminEmail)
+		}
+	}
+}
+
 func TestTracing(t *testing.T) {
 	os.Setenv("GOTRUE_DB_DRIVER", "mysql")
 	os.Setenv("GOTRUE_DB_DATABASE_URL", "fake")
